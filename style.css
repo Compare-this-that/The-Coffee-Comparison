@@ -1,0 +1,178 @@
+/* General page styling */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f4f4f9;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    color: #2c3e50;
+}
+
+/* Container for the dropdown */
+.selector-container {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.selector-container label {
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+#shop-select {
+    font-size: 1rem;
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+/* Container for the price list */
+#price-display {
+    max-width: 600px;
+    margin: 0 auto;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+}
+
+/* Shop title (e.g., "Starbucks Menu") */
+.shop-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #fff;
+    background-color: #007bff; /* Default blue */
+    padding: 20px;
+    margin: 0;
+}
+
+/* Price list styling */
+.price-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.price-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center; /* Vertically center items */
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.price-list li:last-child {
+    border-bottom: none;
+}
+
+.item-name {
+    font-weight: 500;
+}
+
+/* Container for price(s) */
+.item-price {
+    font-weight: 600;
+    color: #0056b3; /* Default single price color */
+    text-align: right;
+    min-width: 210px; /* Give space for S/M/L */
+}
+
+/* NEW: Container for S/M/L price group */
+.item-price-group {
+    display: flex;
+    justify-content: flex-end; /* Align prices to the right */
+    gap: 12px; /* Space between S, M, L */
+}
+
+/* NEW: Style for one S, M, or L price */
+.price-size {
+    font-size: 0.9rem;
+    white-space: nowrap;
+    color: #333; /* Default color for S/M/L prices */
+}
+
+.price-size strong {
+    color: #666; /* Lighter S/M/L labels */
+}
+
+/* -- Shop-specific theme colours (UPDATED) -- */
+#price-display[data-shop="starbucks"] .shop-title {
+    background-color: #00704A;
+}
+#price-display[data-shop="starbucks"] .item-price {
+    color: #00704A; /* Single price color */
+}
+#price-display[data-shop="starbucks"] .price-size {
+    color: #00704A; /* S/M/L price color */
+}
+
+#price-display[data-shop="costa"] .shop-title {
+    background-color: #6D1E3A;
+}
+#price-display[data-shop="costa"] .item-price {
+    color: #6D1E3A;
+}
+#price-display[data-shop="costa"] .price-size {
+    color: #6D1E3A;
+}
+
+#price-display[data-shop="pret"] .shop-title {
+    background-color: #4B0082;
+}
+#price-display[data-shop="pret"] .item-price {
+    color: #4B0082;
+}
+#price-display[data-shop="pret"] .price-size {
+    color: #4B0082;
+}
+
+#price-display[data-shop="greggs"] .shop-title {
+    background-color: #00558F;
+}
+#price-display[data-shop="greggs"] .item-price {
+    color: #00558F;
+}
+#price-display[data-shop="greggs"] .price-size {
+    color: #00558F;
+}
+
+#price-display[data-shop="caffe-nero"] .shop-title {
+    background-color: #1E3A56;
+}
+#price-display[data-shop="caffe-nero"] .item-price {
+    color: #1E3A56;
+}
+#price-display[data-shop="caffe-nero"] .price-size {
+    color: #1E3A56;
+}
+
+#price-display[data-shop="black-sheep"] .shop-title {
+    background-color: #111111;
+}
+#price-display[data-shop="black-sheep"] .item-price {
+    color: #111111;
+}
+#price-display[data-shop="black-sheep"] .price-size {
+    color: #111111;
+}
+
+#price-display[data-shop="mcdonalds"] .shop-title {
+    background-color: #FFC72C;
+    color: #DA291C;
+}
+#price-display[data-shop="mcdonalds"] .item-price {
+    color: #DA291C;
+}
+#price-display[data-shop="mcdonalds"] .price-size {
+    color: #DA291C;
+}

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Coffee Prices</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1>UK High Street Coffee Prices ☕</h1>
+        <p>Select a shop to see its menu and prices.</p>
+    </header>
+
+    <main>
+        <div class="selector-container">
+            <label for="shop-select">Choose a coffee shop:</label>
+            <select id="shop-select">
+                <option value="">--Please choose a shop--</option>
+                <option value="starbucks">Starbucks</option>
+                <option value="costa">Costa Coffee</option>
+                <option value="pret">Pret A Manger</option>
+                <option value="greggs">Greggs</option>
+                <option value="caffe-nero">Caffè Nero</option>
+                <option value="black-sheep">Black Sheep</option>
+                <option value="mcdonalds">Mcdonalds</option>
+            </select>
+        </div>
+
+        <div id="price-display">
+            </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
