@@ -27,11 +27,100 @@
                 <option value="mcdonalds">Mcdonalds</option>
             </select>
         </div>
+        
+        <div id="store-locator">
+            <h3>Find your nearest coffee shop</h3>
+            <input type="text" id="postcode-input" placeholder="Enter your postcode (e.g. SW1A 1AA)">
+            <button onclick="findNearestCoffee()">Search</button>
+            <p id="error-message" style="color: red; display: none;"></p>
+            <ul id="results-list"></ul>
+        </div>
 
         <div id="price-display">
-            </div>
+        </div>
     </main>
 
     <script src="app.js"></script>
+    <script>
+  // 1. Your Mock Database of Coffee Shops
+  // You will need to replace this with your actual list of shops and their coordinates!
+  const coffeeShops = [
+    { name: "The Grind", lat: 51.5245, lon: -0.0873, address: "Old Street, London" },
+    { name: "Ozone Coffee", lat: 51.5262, lon: -0.0864, address: "Leonard St, London" },
+    { name: "Federal Cafe", lat: 53.4835, lon: -2.2384, address: "Northern Quarter, Manchester" },
+    { name: "Laynes Espresso", lat: 53.7937, lon: -1.5471, address: "New Station St, Leeds" }
+  ];
+
+  // 2. The Math (Haversine Formula) to calculate distance in miles
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 3958.8; // Radius of the Earth in miles (use 6371 for kilometers)
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  // 3. The Main Function
+  async function findNearestCoffee() {
+    const postcodeInput = document.getElementById('postcode-input').value.trim();
+    const errorMessage = document.getElementById('error-message');
+    const resultsList = document.getElementById('results-list');
+    
+    // Clear previous results/errors
+    errorMessage.style.display = 'none';
+    resultsList.innerHTML = 'Loading...';
+
+    if (!postcodeInput) {
+      showError("Please enter a postcode.");
+      return;
+    }
+
+    try {
+      // Fetch coordinates from Postcodes.io
+      const response = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcodeInput)}`);
+      const data = await response.json();
+
+      if (data.status !== 200) {
+        showError("Invalid postcode. Please try again.");
+        return;
+      }
+
+      const userLat = data.result.latitude;
+      const userLon = data.result.longitude;
+
+      // Calculate distance for all shops
+      const shopsWithDistances = coffeeShops.map(shop => {
+        const distance = calculateDistance(userLat, userLon, shop.lat, shop.lon);
+        return { ...shop, distance: distance };
+      });
+
+      // Sort by nearest
+      shopsWithDistances.sort((a, b) => a.distance - b.distance);
+
+      // Render the top 3 results
+      resultsList.innerHTML = ''; // clear loading text
+      shopsWithDistances.slice(0, 3).forEach(shop => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${shop.name}</strong> - ${shop.distance.toFixed(1)} miles away<br><small>${shop.address}</small>`;
+        resultsList.appendChild(li);
+      });
+
+    } catch (error) {
+      showError("Something went wrong connecting to the postcode database.");
+    }
+  }
+
+  function showError(msg) {
+    const errorMessage = document.getElementById('error-message');
+    const resultsList = document.getElementById('results-list');
+    errorMessage.textContent = msg;
+    errorMessage.style.display = 'block';
+    resultsList.innerHTML = '';
+  }
+</script>
 </body>
 </html>
