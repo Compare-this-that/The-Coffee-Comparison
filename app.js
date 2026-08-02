@@ -158,7 +158,7 @@ if (shopSelect) {
 
 // --- 4. STORE LOCATOR LOGIC (POSTCODES & OSM) ---
 
-// Fetch ONLY our specific coffee shops from Overpass API (OPTIMIZED FOR SPEED)
+// Fetch ONLY our specific coffee shops from Overpass API
 async function fetchNearbyCoffeeShops(lat, lon) {
   const radiusInMeters = 5000; // 5km search radius (~3.1 miles)
   const selectedShopId = document.getElementById('shop-select').value;
@@ -172,7 +172,6 @@ async function fetchNearbyCoffeeShops(lat, lon) {
 
   const searchRegex = keywords.join("|");
   
-  // THE FIX: We now force the database to only search actual shops and amenities, skipping houses/roads!
   const overpassQuery = `
     [out:json][timeout:10];
     (
@@ -202,7 +201,12 @@ async function fetchNearbyCoffeeShops(lat, lon) {
       const shopLat = element.lat || (element.center && element.center.lat);
       const shopLon = element.lon || (element.center && element.center.lon);
       const name = element.tags.name || element.tags.brand || "Coffee Shop";
-      const address = [element.tags["addr:street"], element.tags["addr:city"]].filter(Boolean).join(", ") || "Address not available";
+      
+      // Attempt to piece together a real address from whatever tags are available
+      const street = element.tags["addr:street"] || "";
+      const city = element.tags["addr:city"] || element.tags["addr:suburb"] || "";
+      const postcode = element.tags["addr:postcode"] || "";
+      const address = [street, city, postcode].filter(Boolean).join(", ");
       
       return { name, lat: shopLat, lon: shopLon, address };
     });
@@ -283,14 +287,26 @@ async function findNearestCoffee() {
     const fragment = document.createDocumentFragment();
     shopsWithDistances.slice(0, 5).forEach(shop => {
       const li = document.createElement('li');
-      li.innerHTML = `<strong>${shop.name}</strong> - ${shop.distance.toFixed(1)} miles away<br><small>${shop.address}</small>`;
+      
+      // If there's an address, format it. If not, leave it blank!
+      const addressText = shop.address ? `<br><small style="color: #666;">${shop.address}</small>` : '';
+      
+      // Create a Google Maps URL using the user's start coordinates and the shop's end coordinates
+      const mapsLink = `https://www.google.com/maps/dir/?api=1&origin=${userLat},${userLon}&destination=${shop.lat},${shop.lon}`;
+      
+      li.innerHTML = `
+        <div style="margin-bottom: 12px;">
+            <strong>${shop.name}</strong> - ${shop.distance.toFixed(1)} miles away
+            ${addressText}
+            <br><small><a href="${mapsLink}" target="_blank" style="color: #007bff; text-decoration: none; font-weight: bold;">📍 Get Directions</a></small>
+        </div>
+      `;
       fragment.appendChild(li);
     });
     
     resultsList.appendChild(fragment);
 
   } catch (error) {
-    // Graceful error handling 
     if (error && error.message && error.message.includes("too busy")) {
         showError(error.message);
     } else {
