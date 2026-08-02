@@ -84,9 +84,6 @@ const coffeeData = {
 const shopSelect = document.getElementById('shop-select');
 const priceDisplay = document.getElementById('price-display');
 
-/**
- * Formats a number as GBP currency (e.g., 4.4 becomes £4.40)
- */
 function formatPrice(price) {
     return price.toLocaleString('en-GB', {
         style: 'currency',
@@ -94,10 +91,6 @@ function formatPrice(price) {
     });
 }
 
-/**
- * This function is called when the user selects a shop.
- * It builds the HTML for the selected shop's menu.
- */
 function displayPrices(shopId) {
     priceDisplay.innerHTML = '';
     priceDisplay.setAttribute('data-shop', shopId);
@@ -116,7 +109,6 @@ function displayPrices(shopId) {
     const list = document.createElement('ul');
     list.className = 'price-list';
 
-    // Loop over each item and build the list
     shop.items.forEach(item => {
         const listItem = document.createElement('li');
 
@@ -124,11 +116,9 @@ function displayPrices(shopId) {
         itemName.className = 'item-name';
         itemName.textContent = item.name;
 
-        // Create the container for the price(s)
         const itemPriceContainer = document.createElement('span');
         itemPriceContainer.className = 'item-price'; 
 
-        // Check if the price is an object (S/M/L) or a single number
         if (typeof item.price === 'object' && item.price !== null) {
             itemPriceContainer.classList.add('item-price-group');
 
@@ -147,7 +137,6 @@ function displayPrices(shopId) {
             itemPriceContainer.appendChild(priceS);
             itemPriceContainer.appendChild(priceM);
             itemPriceContainer.appendChild(priceL);
-
         } else {
             itemPriceContainer.textContent = formatPrice(item.price);
         }
@@ -168,25 +157,20 @@ shopSelect.addEventListener('change', (event) => {
 
 // --- 4. STORE LOCATOR LOGIC (POSTCODES & OSM) ---
 
-// Function to fetch ONLY our specific coffee shops from Overpass API
+// Fetch ONLY our specific coffee shops from Overpass API
 async function fetchNearbyCoffeeShops(lat, lon) {
   const radiusInMeters = 5000; // 5km search radius (~3.1 miles)
   const selectedShopId = document.getElementById('shop-select').value;
   
-  // 1. Define the core keywords for the brands on your list
   let keywords = ["starbucks", "costa", "pret", "greggs", "nero", "sheep", "mcdonald"];
   
-  // If a specific shop is selected in the dropdown, filter our keywords to just that one
   if (selectedShopId && coffeeData[selectedShopId]) {
       const selectedName = coffeeData[selectedShopId].name.toLowerCase();
       keywords = keywords.filter(kw => selectedName.includes(kw));
   }
 
-  // Create a search string for OpenStreetMap (e.g., "starbucks|costa|pret")
   const searchRegex = keywords.join("|");
   
-  // 2. Base Overpass query: We use 'nwr' (Nodes, Ways, Relations) to catch buildings, 
-  // and we specifically only ask for names/brands matching our regex string.
   const overpassQuery = `
     [out:json];
     (
@@ -202,7 +186,6 @@ async function fetchNearbyCoffeeShops(lat, lon) {
     const response = await fetch(url);
     const data = await response.json();
     
-    // 3. Map the results, ensuring we handle building 'centers' correctly so distances aren't broken
     let foundShops = data.elements.map(element => {
       const shopLat = element.lat || (element.center && element.center.lat);
       const shopLon = element.lon || (element.center && element.center.lon);
@@ -212,10 +195,8 @@ async function fetchNearbyCoffeeShops(lat, lon) {
       return { name, lat: shopLat, lon: shopLon, address };
     });
 
-    // 4. Strict filter: Make 100% sure the returned shop contains our brand keyword 
-    // (prevents independent spots like "The Costa Del Sol Cafe" from showing up)
     foundShops = foundShops.filter(shop => {
-      if (!shop.lat || !shop.lon) return false; // Remove broken coordinates
+      if (!shop.lat || !shop.lon) return false; 
       const shopNameLower = shop.name.toLowerCase();
       return keywords.some(kw => shopNameLower.includes(kw));
     });
@@ -226,4 +207,85 @@ async function fetchNearbyCoffeeShops(lat, lon) {
     console.error("Error fetching from Overpass:", error);
     return [];
   }
+}
+
+// The Math (Haversine Formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // Radius of Earth in miles
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// The Main Search Function (This was missing!)
+async function findNearestCoffee() {
+  const postcodeInput = document.getElementById('postcode-input').value.trim();
+  const errorMessage = document.getElementById('error-message');
+  const resultsList = document.getElementById('results-list');
+  
+  errorMessage.style.display = 'none';
+  resultsList.innerHTML = 'Loading live map data...';
+
+  if (!postcodeInput) {
+    showError("Please enter a postcode.");
+    return;
+  }
+
+  try {
+    const postcodeResponse = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcodeInput)}`);
+    const postcodeData = await postcodeResponse.json();
+
+    if (postcodeData.status !== 200) {
+      showError("Invalid postcode. Please try again.");
+      return;
+    }
+
+    const userLat = postcodeData.result.latitude;
+    const userLon = postcodeData.result.longitude;
+
+    const coffeeShops = await fetchNearbyCoffeeShops(userLat, userLon);
+    
+    // Deduplicate results
+    const uniqueShops = Array.from(new Set(coffeeShops.map(s => s.lat + ',' + s.lon)))
+      .map(id => coffeeShops.find(s => s.lat + ',' + s.lon === id));
+    
+    if (uniqueShops.length === 0) {
+      showError("No matching coffee shops found within 3 miles.");
+      return;
+    }
+
+    const shopsWithDistances = uniqueShops.map(shop => {
+      const distance = calculateDistance(userLat, userLon, shop.lat, shop.lon);
+      return { ...shop, distance: distance };
+    });
+
+    shopsWithDistances.sort((a, b) => a.distance - b.distance);
+
+    resultsList.innerHTML = ''; 
+    
+    const fragment = document.createDocumentFragment();
+    shopsWithDistances.slice(0, 5).forEach(shop => {
+      const li = document.createElement('li');
+      li.innerHTML = `<strong>${shop.name}</strong> - ${shop.distance.toFixed(1)} miles away<br><small>${shop.address}</small>`;
+      fragment.appendChild(li);
+    });
+    
+    resultsList.appendChild(fragment);
+
+  } catch (error) {
+    showError("Something went wrong mapping the shops. Please try again.");
+  }
+}
+
+function showError(msg) {
+  const errorMessage = document.getElementById('error-message');
+  const resultsList = document.getElementById('results-list');
+  errorMessage.textContent = msg;
+  errorMessage.style.display = 'block';
+  resultsList.innerHTML = '';
 }
