@@ -157,7 +157,7 @@ shopSelect.addEventListener('change', (event) => {
 
 // --- 4. STORE LOCATOR LOGIC (POSTCODES & OSM) ---
 
-// Fetch ONLY our specific coffee shops from Overpass API
+// Function to fetch ONLY our specific coffee shops from Overpass API
 async function fetchNearbyCoffeeShops(lat, lon) {
   const radiusInMeters = 5000; // 5km search radius (~3.1 miles)
   const selectedShopId = document.getElementById('shop-select').value;
@@ -180,10 +180,20 @@ async function fetchNearbyCoffeeShops(lat, lon) {
     out center;
   `;
 
-  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+  // FIX 1: We are using a less congested backup server (lz4.overpass-api.de)
+  const url = `https://lz4.overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
 
   try {
     const response = await fetch(url);
+    
+    // FIX 2: Check if the server is angry (429) BEFORE trying to read the data
+    if (!response.ok) {
+        if (response.status === 429) {
+            throw new Error("The map server is currently too busy. Please wait a minute and try again.");
+        }
+        throw new Error("Map server error.");
+    }
+
     const data = await response.json();
     
     let foundShops = data.elements.map(element => {
@@ -203,89 +213,12 @@ async function fetchNearbyCoffeeShops(lat, lon) {
 
     return foundShops;
 
-  } catch (error) {
-    console.error("Error fetching from Overpass:", error);
-    return [];
-  }
-}
-
-// The Math (Haversine Formula)
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 3958.8; // Radius of Earth in miles
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// The Main Search Function (This was missing!)
-async function findNearestCoffee() {
-  const postcodeInput = document.getElementById('postcode-input').value.trim();
-  const errorMessage = document.getElementById('error-message');
-  const resultsList = document.getElementById('results-list');
-  
-  errorMessage.style.display = 'none';
-  resultsList.innerHTML = 'Loading live map data...';
-
-  if (!postcodeInput) {
-    showError("Please enter a postcode.");
-    return;
-  }
-
-  try {
-    const postcodeResponse = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcodeInput)}`);
-    const postcodeData = await postcodeResponse.json();
-
-    if (postcodeData.status !== 200) {
-      showError("Invalid postcode. Please try again.");
-      return;
+ } catch (error) {
+    // If we threw a specific error message above, display it. Otherwise, show a generic one.
+    if (error.message.includes("too busy")) {
+        showError(error.message);
+    } else {
+        showError("Something went wrong mapping the shops. Please try again.");
     }
-
-    const userLat = postcodeData.result.latitude;
-    const userLon = postcodeData.result.longitude;
-
-    const coffeeShops = await fetchNearbyCoffeeShops(userLat, userLon);
-    
-    // Deduplicate results
-    const uniqueShops = Array.from(new Set(coffeeShops.map(s => s.lat + ',' + s.lon)))
-      .map(id => coffeeShops.find(s => s.lat + ',' + s.lon === id));
-    
-    if (uniqueShops.length === 0) {
-      showError("No matching coffee shops found within 3 miles.");
-      return;
-    }
-
-    const shopsWithDistances = uniqueShops.map(shop => {
-      const distance = calculateDistance(userLat, userLon, shop.lat, shop.lon);
-      return { ...shop, distance: distance };
-    });
-
-    shopsWithDistances.sort((a, b) => a.distance - b.distance);
-
-    resultsList.innerHTML = ''; 
-    
-    const fragment = document.createDocumentFragment();
-    shopsWithDistances.slice(0, 5).forEach(shop => {
-      const li = document.createElement('li');
-      li.innerHTML = `<strong>${shop.name}</strong> - ${shop.distance.toFixed(1)} miles away<br><small>${shop.address}</small>`;
-      fragment.appendChild(li);
-    });
-    
-    resultsList.appendChild(fragment);
-
-  } catch (error) {
-    showError("Something went wrong mapping the shops. Please try again.");
   }
-}
-
-function showError(msg) {
-  const errorMessage = document.getElementById('error-message');
-  const resultsList = document.getElementById('results-list');
-  errorMessage.textContent = msg;
-  errorMessage.style.display = 'block';
-  resultsList.innerHTML = '';
 }
