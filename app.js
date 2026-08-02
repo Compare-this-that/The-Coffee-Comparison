@@ -168,27 +168,31 @@ shopSelect.addEventListener('change', (event) => {
 
 // --- 4. STORE LOCATOR LOGIC (POSTCODES & OSM) ---
 
-// Function to fetch coffee shops from Overpass API
+// Function to fetch ONLY our specific coffee shops from Overpass API
 async function fetchNearbyCoffeeShops(lat, lon) {
-  const radiusInMeters = 2000; // Search within 2 kilometers
+  const radiusInMeters = 5000; // 5km search radius (~3.1 miles)
   const selectedShopId = document.getElementById('shop-select').value;
   
-  // Base Overpass query for cafes near the coordinates
-  let overpassQuery = `
-    [out:json];
-    node["amenity"="cafe"](around:${radiusInMeters},${lat},${lon});
-  `;
+  // 1. Define the core keywords for the brands on your list
+  let keywords = ["starbucks", "costa", "pret", "greggs", "nero", "sheep", "mcdonald"];
   
-  // If a specific brand is selected, we filter by its actual brand name using regex
+  // If a specific shop is selected in the dropdown, filter our keywords to just that one
   if (selectedShopId && coffeeData[selectedShopId]) {
-    // We split by space to just match the core brand name (e.g. "Costa" instead of "Costa Coffee") for a safer OpenStreetMap match
-    const brandName = coffeeData[selectedShopId].name.split(" ")[0]; 
-    overpassQuery += `node["brand"~"${brandName}",i](around:${radiusInMeters},${lat},${lon});`;
-    // Also check the "name" tag just in case it's not tagged as a brand
-    overpassQuery += `node["name"~"${brandName}",i](around:${radiusInMeters},${lat},${lon});`;
+      const selectedName = coffeeData[selectedShopId].name.toLowerCase();
+      keywords = keywords.filter(kw => selectedName.includes(kw));
   }
+
+  // Create a search string for OpenStreetMap (e.g., "starbucks|costa|pret")
+  const searchRegex = keywords.join("|");
   
-  overpassQuery += `
+  // 2. Base Overpass query: We use 'nwr' (Nodes, Ways, Relations) to catch buildings, 
+  // and we specifically only ask for names/brands matching our regex string.
+  const overpassQuery = `
+    [out:json];
+    (
+      nwr["name"~"${searchRegex}",i](around:${radiusInMeters},${lat},${lon});
+      nwr["brand"~"${searchRegex}",i](around:${radiusInMeters},${lat},${lon});
+    );
     out center;
   `;
 
@@ -197,101 +201,29 @@ async function fetchNearbyCoffeeShops(lat, lon) {
   try {
     const response = await fetch(url);
     const data = await response.json();
-    return data.elements.map(element => ({
-      name: element.tags.name || element.tags.brand || "Coffee Shop",
-      lat: element.lat,
-      lon: element.lon,
-      address: [element.tags["addr:street"], element.tags["addr:city"]].filter(Boolean).join(", ") || "Address not available"
-    }));
+    
+    // 3. Map the results, ensuring we handle building 'centers' correctly so distances aren't broken
+    let foundShops = data.elements.map(element => {
+      const shopLat = element.lat || (element.center && element.center.lat);
+      const shopLon = element.lon || (element.center && element.center.lon);
+      const name = element.tags.name || element.tags.brand || "Coffee Shop";
+      const address = [element.tags["addr:street"], element.tags["addr:city"]].filter(Boolean).join(", ") || "Address not available";
+      
+      return { name, lat: shopLat, lon: shopLon, address };
+    });
+
+    // 4. Strict filter: Make 100% sure the returned shop contains our brand keyword 
+    // (prevents independent spots like "The Costa Del Sol Cafe" from showing up)
+    foundShops = foundShops.filter(shop => {
+      if (!shop.lat || !shop.lon) return false; // Remove broken coordinates
+      const shopNameLower = shop.name.toLowerCase();
+      return keywords.some(kw => shopNameLower.includes(kw));
+    });
+
+    return foundShops;
+
   } catch (error) {
     console.error("Error fetching from Overpass:", error);
     return [];
   }
-}
-
-// The Math (Haversine Formula) to calculate distance in miles
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 3958.8; // Radius of the Earth in miles
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// The Main Search Function
-async function findNearestCoffee() {
-  const postcodeInput = document.getElementById('postcode-input').value.trim();
-  const errorMessage = document.getElementById('error-message');
-  const resultsList = document.getElementById('results-list');
-  
-  // Clear previous results/errors
-  errorMessage.style.display = 'none';
-  resultsList.innerHTML = 'Loading...';
-
-  if (!postcodeInput) {
-    showError("Please enter a postcode.");
-    return;
-  }
-
-  try {
-    // 1. Fetch coordinates from Postcodes.io
-    const postcodeResponse = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcodeInput)}`);
-    const postcodeData = await postcodeResponse.json();
-
-    if (postcodeData.status !== 200) {
-      showError("Invalid postcode. Please try again.");
-      return;
-    }
-
-    const userLat = postcodeData.result.latitude;
-    const userLon = postcodeData.result.longitude;
-
-    // 2. Fetch real coffee shops from OpenStreetMap
-    const coffeeShops = await fetchNearbyCoffeeShops(userLat, userLon);
-    
-    // Deduplicate results based on lat/lon (OSM sometimes returns duplicate nodes)
-    const uniqueShops = Array.from(new Set(coffeeShops.map(s => s.lat + ',' + s.lon)))
-      .map(id => coffeeShops.find(s => s.lat + ',' + s.lon === id));
-    
-    if (uniqueShops.length === 0) {
-      showError("No coffee shops found in that area.");
-      return;
-    }
-
-    // 3. Calculate exact distances
-    const shopsWithDistances = uniqueShops.map(shop => {
-      const distance = calculateDistance(userLat, userLon, shop.lat, shop.lon);
-      return { ...shop, distance: distance };
-    });
-
-    // 4. Sort by nearest
-    shopsWithDistances.sort((a, b) => a.distance - b.distance);
-
-    // 5. Render the top 5 results
-    resultsList.innerHTML = ''; 
-    
-    const fragment = document.createDocumentFragment();
-    shopsWithDistances.slice(0, 5).forEach(shop => {
-      const li = document.createElement('li');
-      li.innerHTML = `<strong>${shop.name}</strong> - ${shop.distance.toFixed(1)} miles away<br><small>${shop.address}</small>`;
-      fragment.appendChild(li);
-    });
-    
-    resultsList.appendChild(fragment);
-
-  } catch (error) {
-    showError("Something went wrong. Please try again later.");
-  }
-}
-
-function showError(msg) {
-  const errorMessage = document.getElementById('error-message');
-  const resultsList = document.getElementById('results-list');
-  errorMessage.textContent = msg;
-  errorMessage.style.display = 'block';
-  resultsList.innerHTML = '';
 }
