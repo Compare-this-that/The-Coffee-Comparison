@@ -8,7 +8,7 @@ const coffeeData = {
             { name: "Caffè Americano", price: { s: 3.50, m: 3.80, l: 4.10 } },
             { name: "Flat White", price: { s: 4.05, m: 4.35, l: 4.65 } },
             { name: "Caramel Macchiato", price: { s: 4.50, m: 4.80, l: 5.10 } },
-            { name: "Filter Coffee", price: 2.75 } // This item has only one price
+            { name: "Filter Coffee", price: 2.75 } 
         ]
     },
     "costa": {
@@ -79,15 +79,13 @@ const coffeeData = {
     }
 };
 
-// --- 2. THE LOGIC (UPDATED) ---
+// --- 2. THE LOGIC (MENU & PRICES) ---
 
 const shopSelect = document.getElementById('shop-select');
 const priceDisplay = document.getElementById('price-display');
 
 /**
  * Formats a number as GBP currency (e.g., 4.4 becomes £4.40)
- * @param {number} price - The price to format
- * @returns {string} - The formatted price string
  */
 function formatPrice(price) {
     return price.toLocaleString('en-GB', {
@@ -99,7 +97,6 @@ function formatPrice(price) {
 /**
  * This function is called when the user selects a shop.
  * It builds the HTML for the selected shop's menu.
- * @param {string} shopId - The value from the select (e.g., "starbucks")
  */
 function displayPrices(shopId) {
     priceDisplay.innerHTML = '';
@@ -129,25 +126,20 @@ function displayPrices(shopId) {
 
         // Create the container for the price(s)
         const itemPriceContainer = document.createElement('span');
-        itemPriceContainer.className = 'item-price'; // Base class
+        itemPriceContainer.className = 'item-price'; 
 
-        // --- NEW LOGIC ---
         // Check if the price is an object (S/M/L) or a single number
         if (typeof item.price === 'object' && item.price !== null) {
-            // It's an object with S/M/L prices
             itemPriceContainer.classList.add('item-price-group');
 
-            // Small
             const priceS = document.createElement('span');
             priceS.className = 'price-size';
             priceS.innerHTML = `<strong>S:</strong> ${formatPrice(item.price.s)}`;
             
-            // Medium
             const priceM = document.createElement('span');
             priceM.className = 'price-size';
             priceM.innerHTML = `<strong>M:</strong> ${formatPrice(item.price.m)}`;
             
-            // Large
             const priceL = document.createElement('span');
             priceL.className = 'price-size';
             priceL.innerHTML = `<strong>L:</strong> ${formatPrice(item.price.l)}`;
@@ -157,10 +149,8 @@ function displayPrices(shopId) {
             itemPriceContainer.appendChild(priceL);
 
         } else {
-            // It's just a single price (a number)
             itemPriceContainer.textContent = formatPrice(item.price);
         }
-        // --- END OF NEW LOGIC ---
 
         listItem.appendChild(itemName);
         listItem.appendChild(itemPriceContainer);
@@ -174,3 +164,134 @@ function displayPrices(shopId) {
 shopSelect.addEventListener('change', (event) => {
     displayPrices(event.target.value);
 });
+
+
+// --- 4. STORE LOCATOR LOGIC (POSTCODES & OSM) ---
+
+// Function to fetch coffee shops from Overpass API
+async function fetchNearbyCoffeeShops(lat, lon) {
+  const radiusInMeters = 2000; // Search within 2 kilometers
+  const selectedShopId = document.getElementById('shop-select').value;
+  
+  // Base Overpass query for cafes near the coordinates
+  let overpassQuery = `
+    [out:json];
+    node["amenity"="cafe"](around:${radiusInMeters},${lat},${lon});
+  `;
+  
+  // If a specific brand is selected, we filter by its actual brand name using regex
+  if (selectedShopId && coffeeData[selectedShopId]) {
+    // We split by space to just match the core brand name (e.g. "Costa" instead of "Costa Coffee") for a safer OpenStreetMap match
+    const brandName = coffeeData[selectedShopId].name.split(" ")[0]; 
+    overpassQuery += `node["brand"~"${brandName}",i](around:${radiusInMeters},${lat},${lon});`;
+    // Also check the "name" tag just in case it's not tagged as a brand
+    overpassQuery += `node["name"~"${brandName}",i](around:${radiusInMeters},${lat},${lon});`;
+  }
+  
+  overpassQuery += `
+    out center;
+  `;
+
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    return data.elements.map(element => ({
+      name: element.tags.name || element.tags.brand || "Coffee Shop",
+      lat: element.lat,
+      lon: element.lon,
+      address: [element.tags["addr:street"], element.tags["addr:city"]].filter(Boolean).join(", ") || "Address not available"
+    }));
+  } catch (error) {
+    console.error("Error fetching from Overpass:", error);
+    return [];
+  }
+}
+
+// The Math (Haversine Formula) to calculate distance in miles
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // Radius of the Earth in miles
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// The Main Search Function
+async function findNearestCoffee() {
+  const postcodeInput = document.getElementById('postcode-input').value.trim();
+  const errorMessage = document.getElementById('error-message');
+  const resultsList = document.getElementById('results-list');
+  
+  // Clear previous results/errors
+  errorMessage.style.display = 'none';
+  resultsList.innerHTML = 'Loading...';
+
+  if (!postcodeInput) {
+    showError("Please enter a postcode.");
+    return;
+  }
+
+  try {
+    // 1. Fetch coordinates from Postcodes.io
+    const postcodeResponse = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcodeInput)}`);
+    const postcodeData = await postcodeResponse.json();
+
+    if (postcodeData.status !== 200) {
+      showError("Invalid postcode. Please try again.");
+      return;
+    }
+
+    const userLat = postcodeData.result.latitude;
+    const userLon = postcodeData.result.longitude;
+
+    // 2. Fetch real coffee shops from OpenStreetMap
+    const coffeeShops = await fetchNearbyCoffeeShops(userLat, userLon);
+    
+    // Deduplicate results based on lat/lon (OSM sometimes returns duplicate nodes)
+    const uniqueShops = Array.from(new Set(coffeeShops.map(s => s.lat + ',' + s.lon)))
+      .map(id => coffeeShops.find(s => s.lat + ',' + s.lon === id));
+    
+    if (uniqueShops.length === 0) {
+      showError("No coffee shops found in that area.");
+      return;
+    }
+
+    // 3. Calculate exact distances
+    const shopsWithDistances = uniqueShops.map(shop => {
+      const distance = calculateDistance(userLat, userLon, shop.lat, shop.lon);
+      return { ...shop, distance: distance };
+    });
+
+    // 4. Sort by nearest
+    shopsWithDistances.sort((a, b) => a.distance - b.distance);
+
+    // 5. Render the top 5 results
+    resultsList.innerHTML = ''; 
+    
+    const fragment = document.createDocumentFragment();
+    shopsWithDistances.slice(0, 5).forEach(shop => {
+      const li = document.createElement('li');
+      li.innerHTML = `<strong>${shop.name}</strong> - ${shop.distance.toFixed(1)} miles away<br><small>${shop.address}</small>`;
+      fragment.appendChild(li);
+    });
+    
+    resultsList.appendChild(fragment);
+
+  } catch (error) {
+    showError("Something went wrong. Please try again later.");
+  }
+}
+
+function showError(msg) {
+  const errorMessage = document.getElementById('error-message');
+  const resultsList = document.getElementById('results-list');
+  errorMessage.textContent = msg;
+  errorMessage.style.display = 'block';
+  resultsList.innerHTML = '';
+}
